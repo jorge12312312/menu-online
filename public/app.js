@@ -26,6 +26,61 @@ const paymentModal    = document.getElementById('payment-modal');
 const btnClosePayment = document.getElementById('btn-close-payment');
 const btnWhatsapp     = document.getElementById('btn-whatsapp');
 
+// ── Web Audio Engine ──────────────────────────────────────────────────
+let _audioCtx = null;
+function getAudioCtx() {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    return _audioCtx;
+}
+
+/* Sonido 1: Swoosh suave (papel/flip) — al girar tarjeta y cambiar categoría */
+function playFlipSound() {
+    try {
+        const ctx  = getAudioCtx();
+        const dur  = 0.11;
+        const sr   = ctx.sampleRate;
+        const buf  = ctx.createBuffer(1, Math.floor(sr * dur), sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            const t  = i / sr;
+            data[i]  = (Math.random() * 2 - 1) * Math.exp(-t * 45) * 0.28;
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const filt = ctx.createBiquadFilter();
+        filt.type = 'bandpass';
+        filt.frequency.setValueAtTime(1600, ctx.currentTime);
+        filt.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + dur);
+        filt.Q.value = 1.8;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.55, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+        src.connect(filt); filt.connect(gain); gain.connect(ctx.destination);
+        src.start();
+    } catch(e) { /* fail silently */ }
+}
+
+/* Sonido 2: Campanilla de moneda (ding) — al añadir al carrito */
+function playAddSound() {
+    try {
+        const ctx = getAudioCtx();
+        const t   = ctx.currentTime;
+        [[880, 0, 0.18], [1320, 0.06, 0.14], [1760, 0.11, 0.10]].forEach(([freq, delay, vol]) => {
+            const osc  = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0, t + delay);
+            gain.gain.linearRampToValueAtTime(vol, t + delay + 0.009);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.42);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(t + delay); osc.stop(t + delay + 0.45);
+        });
+    } catch(e) { /* fail silently */ }
+}
+
+
 // Search / View Elements
 const searchInput       = document.getElementById('search-input');
 const menuGridWrapper   = document.getElementById('menu-grid-wrapper');
@@ -68,12 +123,17 @@ function createCard(item) {
 
     if (item.available === false) {
         card.className = 'menu-card out-of-stock';
-        card.onclick = (e) => { e.preventDefault(); };
+        card.onclick = (e) => {
+            if (e.target.closest('.btn-add')) return;
+            card.classList.toggle('flipped');
+            playFlipSound();
+        };
     } else {
         card.className = 'menu-card';
         card.onclick = (e) => {
             if (e.target.closest('.btn-add')) return;
-            addToCart(item);
+            card.classList.toggle('flipped');
+            playFlipSound();
         };
     }
 
@@ -87,22 +147,31 @@ function createCard(item) {
                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                </svg>
            </button>`
-        : `<button class="btn-add" aria-label="Añadir al carrito" onclick="event.stopPropagation(); addToCartById('${item.id}')">
+        : `<button class="btn-add" aria-label="Añadir al carrito" onclick="event.stopPropagation(); playAddSound(); addToCartById('${item.id}')">
                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                </svg>
            </button>`;
 
     card.innerHTML = `
-        <div class="card-image-wrap">
-            <img src="${item.image_url || ''}" class="card-image" alt="${item.name}" loading="lazy" onerror="this.parentElement.style.background='#1c1c1c'">
-            ${badgeHtml}
-            ${btnHtml}
-        </div>
-        <div class="card-content">
-            <div class="card-title">${item.name}</div>
-            ${item.description ? `<div class="card-desc">${item.description}</div>` : ''}
-            <div class="card-price">S/ ${item.price.toFixed(2)}</div>
+        <div class="card-inner">
+            <div class="card-face card-front">
+                <div class="card-image-wrap">
+                    <img src="${item.image_url || ''}" class="card-image" alt="${item.name}" loading="lazy" onerror="this.parentElement.style.background='#1c1c1c'">
+                    ${badgeHtml}
+                    ${btnHtml}
+                </div>
+                <div class="card-content">
+                    <div class="card-title">${item.name}</div>
+                    <div class="card-price">S/ ${item.price.toFixed(2)}</div>
+                </div>
+            </div>
+            <div class="card-face card-back">
+                <div class="card-back-icon">${item.image_url ? '🍽️' : '📝'}</div>
+                <div class="card-back-title">${item.name}</div>
+                <div class="card-back-desc">${item.description || '<span class="no-desc">Sin descripción disponible</span>'}</div>
+                <div class="card-back-price">S/ ${item.price.toFixed(2)}</div>
+            </div>
         </div>
     `;
     return card;
@@ -133,7 +202,7 @@ function renderApp() {
     allPill.className = 'nav-pill active';
     allPill.dataset.catId = '';
     allPill.textContent = 'Todos';
-    allPill.onclick = () => filterByCategory(null);
+    allPill.onclick = () => { filterByCategory(null); playFlipSound(); };
     categoryNav.appendChild(allPill);
 
     seenCats.forEach(cat => {
@@ -141,7 +210,7 @@ function renderApp() {
         pill.className = 'nav-pill';
         pill.dataset.catId = cat.id;
         pill.textContent = cat.name;
-        pill.onclick = () => filterByCategory(cat.id);
+        pill.onclick = () => { filterByCategory(cat.id); playFlipSound(); };
         categoryNav.appendChild(pill);
     });
 
