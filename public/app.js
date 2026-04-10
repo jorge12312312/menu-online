@@ -493,12 +493,14 @@ paymentOverlay.addEventListener('click', closePaymentModal);
 
 // ── WhatsApp Checkout ────────────────────────────────────────────────────────
 function buildWhatsAppMessage(totalAmount, method) {
-    let text = `Hola! Quiero hacer este pedido:\n`;
+    let text = `*NUEVO PEDIDO WEB*\n`;
+    text += `--------------------------------\n`;
     cart.forEach(item => {
-        text += `- ${item.quantity}x ${item.name}  (S/ ${(item.price * item.quantity).toFixed(2)})\n`;
+        text += `${item.quantity}x ${item.name} - S/ ${(item.price * item.quantity).toFixed(2)}\n`;
     });
-    text += `\n*Total: S/ ${totalAmount.toFixed(2)}*\n`;
-    text += `*Método de pago: ${method}*`;
+    text += `--------------------------------\n`;
+    text += `Total: S/ ${totalAmount.toFixed(2)}\n`;
+    text += `Pago: ${method}`;
     return text;
 }
 
