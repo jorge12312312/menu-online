@@ -167,7 +167,29 @@ body {
 
 .category-nav::-webkit-scrollbar { display: none; }
 
-/* Fade edges on horizontal scroll */
+/* ── Sub-pills de Bebidas ────────────────────────────────────────────────── */
+.nav-sub-pill {
+    background: rgba(61,169,74,0.1) !important;
+    border-color: rgba(61,169,74,0.4) !important;
+    color: rgba(255,255,255,0.75) !important;
+    font-size: 12px !important;
+    padding: 5px 14px !important;
+    animation: subPillIn 0.22s ease both;
+}
+
+.nav-sub-pill.active {
+    background: var(--accent-primary) !important;
+    border-color: var(--accent-primary) !important;
+    color: #fff !important;
+    box-shadow: 0 0 12px var(--accent-glow) !important;
+}
+
+@keyframes subPillIn {
+    from { opacity: 0; transform: scale(0.78) translateY(4px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Fade edges nav ──────────────────────────────────────────────────── */
 .category-nav-wrapper::after {
     content: '';
     position: absolute;
@@ -650,6 +672,38 @@ body {
     }
     .fab-cart:hover { transform: translateY(-3px); }
     .fab-cart:active { transform: scale(0.96); }
+}
+
+/* ── FAB anclado sobre el 'Total' del modal cuando el carrito está abierto ── */
+.cart-open .fab-cart {
+    /* Se superpone al footer del modal (z-index 202 > modal 201) */
+    position: fixed;
+    bottom: 118px;        /* altura del footer del modal ≈ padding + botones */
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    z-index: 202;
+    box-shadow: 0 4px 20px var(--accent-glow), 0 2px 8px rgba(0,0,0,0.5);
+    pointer-events: none; /* no bloquea clicks en el modal */
+    cursor: default;
+}
+
+/* En pantallas anchas el FAB-modal se centra dentro del modal (max-width 620px) */
+@media (min-width: 620px) {
+    .cart-open .fab-cart {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        bottom: 146px;
+    }
+}
+
+/* Oculta la fila "Total" del modal cuando el FAB la reemplaza */
+.cart-open .summary-row {
+    visibility: hidden;
+    margin-bottom: 0;
+    height: 0;
+    overflow: hidden;
 }
 
 @keyframes slideDown {

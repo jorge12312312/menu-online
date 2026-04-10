@@ -2,7 +2,12 @@ let globalCategories = [];
 let globalItems = [];
 let cart = [];
 let fuse = null;
-let activeCatId = null; // null = todas las categorías visibles
+let activeCatId = null; // null = ver todo; string = catId; array = varios catIds
+
+// Categorías que NUNCA aparecen en navegación ni en grid
+const HIDDEN_CATEGORIES = ['Helados', 'Especiales del dia', 'Extras'];
+// Categorías que se agrupan bajo el pill maestro "Bebidas"
+const BEBIDAS_SUBCATS   = ['Con Alcohol', 'Sin alcohol'];
 
 // DOM Elements
 const loader             = document.getElementById('loader');
@@ -95,14 +100,15 @@ async function initApp() {
         if (data.error) throw new Error(data.error);
 
         globalCategories = data.categories || [];
-        globalItems      = data.items      || [];
+        // 1) Quitar agotados
+        globalItems = (data.items || []).filter(i => i.available !== false);
     } catch (error) {
         console.error('Error detallado:', error);
         loader.innerHTML = `<p style="color:#ff6b6b">Error al cargar el menú. Por favor recarga la página.</p>`;
         return;
     }
 
-    // Inicializar Fuse solo después de tener los datos y solo si la librería cargó
+    // Inicializar Fuse solo con ítems disponibles
     if (typeof Fuse !== 'undefined') {
         fuse = new Fuse(globalItems, {
             keys: ['name', 'description'],
@@ -185,24 +191,49 @@ function renderApp() {
     const categoryMap = {};
     globalCategories.forEach(c => { categoryMap[c.id] = c.name; });
 
-    // Collect unique category IDs preserved in item order
+    // Helper: devuelve true si la categoría debe ocultarse
+    const isHidden = name => HIDDEN_CATEGORIES.includes(name) || BEBIDAS_SUBCATS.includes(name);
+
+    // IDs de las subcategorías de bebidas
+    const bebidasIds = globalCategories
+        .filter(c => BEBIDAS_SUBCATS.includes(c.name))
+        .map(c => c.id);
+
+    // Colectar categorías visibles en el orden en que aparecen los ítems
     const seenCats = [];
+    let bebidasAdded = false;
     globalItems.forEach(item => {
-        const catId = item.category_id || 'uncategorized';
+        const catId   = item.category_id || 'uncategorized';
+        const catName = categoryMap[catId] || 'Otros';
+
+        // Si es subcat de Bebidas → agregar pill maestro una sola vez
+        if (BEBIDAS_SUBCATS.includes(catName)) {
+            if (!bebidasAdded) {
+                seenCats.push({ id: '__bebidas__', name: 'Bebidas', isMaster: true });
+                bebidasAdded = true;
+            }
+            return;
+        }
+        // Si es categoría oculta → ignorar
+        if (HIDDEN_CATEGORIES.includes(catName)) return;
+
         if (!seenCats.find(c => c.id === catId)) {
-            seenCats.push({ id: catId, name: categoryMap[catId] || 'Otros' });
+            seenCats.push({ id: catId, name: catName });
         }
     });
 
     // ── Nav Pills ──
     categoryNav.innerHTML = '';
 
-    // "Todos" pill
     const allPill = document.createElement('li');
     allPill.className = 'nav-pill active';
     allPill.dataset.catId = '';
     allPill.textContent = 'Todos';
-    allPill.onclick = () => { filterByCategory(null); playFlipSound(); };
+    allPill.onclick = () => {
+        removeSubPills();
+        filterByCategory(null);
+        playFlipSound();
+    };
     categoryNav.appendChild(allPill);
 
     seenCats.forEach(cat => {
@@ -210,32 +241,91 @@ function renderApp() {
         pill.className = 'nav-pill';
         pill.dataset.catId = cat.id;
         pill.textContent = cat.name;
-        pill.onclick = () => { filterByCategory(cat.id); playFlipSound(); };
+
+        if (cat.isMaster) {
+            // Pill maestro "Bebidas": despliega sub-pills
+            pill.onclick = () => {
+                playFlipSound();
+                const alreadyActive = pill.classList.contains('active');
+                removeSubPills();
+                document.querySelectorAll('.nav-pill').forEach(p => p.classList.remove('active'));
+                if (alreadyActive) {
+                    // Toggle off → volver a Todos
+                    allPill.classList.add('active');
+                    filterByCategory(null);
+                    return;
+                }
+                pill.classList.add('active');
+                // Filtrar TODOS los artículos de bebidas agregados
+                filterByCategory(bebidasIds);
+                // Insertar sub-pills justo después de este pill
+                const subCats = globalCategories.filter(c => BEBIDAS_SUBCATS.includes(c.name));
+                subCats.forEach(sc => {
+                    const sub = document.createElement('li');
+                    sub.className = 'nav-pill nav-sub-pill';
+                    sub.dataset.catId = sc.id;
+                    sub.dataset.isSub = '1';
+                    sub.textContent = sc.name;
+                    sub.onclick = () => {
+                        playFlipSound();
+                        document.querySelectorAll('.nav-sub-pill').forEach(s => s.classList.remove('active'));
+                        sub.classList.add('active');
+                        filterByCategory(sc.id);
+                    };
+                    pill.insertAdjacentElement('afterend', sub);
+                });
+            };
+        } else {
+            pill.onclick = () => {
+                removeSubPills();
+                filterByCategory(cat.id);
+                playFlipSound();
+            };
+        }
         categoryNav.appendChild(pill);
     });
 
-    // ── Single Grid with all cards ──
+    // ── Grid: solo ítems de categorías visibles ──
     const grid = document.getElementById('menu-grid');
     grid.innerHTML = '';
     globalItems.forEach(item => {
+        const catName = categoryMap[item.category_id] || '';
+        if (HIDDEN_CATEGORIES.includes(catName)) return; // ocultar
         const card = createCard(item);
         card.dataset.catId = item.category_id || 'uncategorized';
         grid.appendChild(card);
     });
 }
 
+// Elimina los sub-pills de bebidas del DOM
+function removeSubPills() {
+    document.querySelectorAll('.nav-sub-pill').forEach(s => s.remove());
+}
+
 // ── Category Filter ───────────────────────────────────────────────────────────
+// catId: null = todos | string = un catId | string[] = varios catIds (Bebidas)
 function filterByCategory(catId) {
     activeCatId = catId;
 
-    // Update active pill
-    document.querySelectorAll('.nav-pill').forEach(p => {
-        p.classList.toggle('active', p.dataset.catId === (catId || ''));
+    // Update active pill (solo pills no-sub)
+    document.querySelectorAll('.nav-pill:not(.nav-sub-pill)').forEach(p => {
+        if (Array.isArray(catId)) {
+            p.classList.toggle('active', p.dataset.catId === '__bebidas__');
+        } else {
+            p.classList.toggle('active', p.dataset.catId === (catId || ''));
+        }
     });
 
     // Show/hide cards
     document.querySelectorAll('#menu-grid .menu-card').forEach(card => {
-        const match = !catId || card.dataset.catId === catId;
+        let match;
+        if (!catId) {
+            match = true;
+        } else if (Array.isArray(catId)) {
+            match = catId.includes(card.dataset.catId);
+        } else {
+            match = card.dataset.catId === catId;
+        }
         card.style.display = match ? '' : 'none';
     });
 }
@@ -370,12 +460,14 @@ function renderCartModal() {
 fabCart.addEventListener('click', () => {
     cartOverlay.classList.add('active');
     cartModal.classList.add('active');
+    document.body.classList.add('cart-open');
     document.body.style.overflow = 'hidden';
 });
 
 function closeCartSettings() {
     cartOverlay.classList.remove('active');
     cartModal.classList.remove('active');
+    document.body.classList.remove('cart-open');
     document.body.style.overflow = '';
 }
 
