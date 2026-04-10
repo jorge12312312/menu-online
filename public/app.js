@@ -2,12 +2,14 @@ let globalCategories = [];
 let globalItems = [];
 let cart = [];
 let fuse = null;
-let activeCatId = null; // null = ver todo; string = catId; array = varios catIds
+let activeCatId = null;
 
-// Categorías que NUNCA aparecen en navegación ni en grid
-const HIDDEN_CATEGORIES = ['Helados', 'Especiales del dia', 'Extras'];
-// Categorías que se agrupan bajo el pill maestro "Bebidas"
+// Categorías que NUNCA aparecen en la UI
+const HIDDEN_CATEGORIES = ['Helados', 'Especiales del dia', 'Extras', 'Otros'];
+// Subcategorías agrupadas bajo "Bebidas"
 const BEBIDAS_SUBCATS   = ['Con Alcohol', 'Sin alcohol'];
+// Orden estricto de la barra de navegación
+const CATEGORY_ORDER    = ['Entradas', 'Pollos', 'Platos criollos', 'Pescados y Mariscos', 'Bebidas'];
 
 // DOM Elements
 const loader             = document.getElementById('loader');
@@ -187,120 +189,142 @@ function createCard(item) {
 function renderApp() {
     loader.style.display = 'none';
 
-    // Build category map
     const categoryMap = {};
     globalCategories.forEach(c => { categoryMap[c.id] = c.name; });
 
-    // Helper: devuelve true si la categoría debe ocultarse
-    const isHidden = name => HIDDEN_CATEGORIES.includes(name) || BEBIDAS_SUBCATS.includes(name);
-
-    // IDs de las subcategorías de bebidas
+    // IDs de subcategorías de Bebidas
     const bebidasIds = globalCategories
         .filter(c => BEBIDAS_SUBCATS.includes(c.name))
         .map(c => c.id);
 
-    // Colectar categorías visibles en el orden en que aparecen los ítems
-    const seenCats = [];
-    let bebidasAdded = false;
+    // Mapa nombre → id (incluyendo lo que revelan los ítems)
+    const nameToId = {};
+    globalCategories.forEach(c => { nameToId[c.name] = c.id; });
     globalItems.forEach(item => {
-        const catId   = item.category_id || 'uncategorized';
-        const catName = categoryMap[catId] || 'Otros';
-
-        // Si es subcat de Bebidas → agregar pill maestro una sola vez
-        if (BEBIDAS_SUBCATS.includes(catName)) {
-            if (!bebidasAdded) {
-                seenCats.push({ id: '__bebidas__', name: 'Bebidas', isMaster: true });
-                bebidasAdded = true;
-            }
-            return;
-        }
-        // Si es categoría oculta → ignorar
-        if (HIDDEN_CATEGORIES.includes(catName)) return;
-
-        if (!seenCats.find(c => c.id === catId)) {
-            seenCats.push({ id: catId, name: catName });
-        }
+        const name = categoryMap[item.category_id] || '';
+        if (name && !nameToId[name]) nameToId[name] = item.category_id;
     });
 
-    // ── Nav Pills ──
+    // IDs que realmente tienen ítems disponibles
+    const presentCatIds = new Set(globalItems.map(i => i.category_id));
+
+    // ── Nav Pills (orden estricto) ──
     categoryNav.innerHTML = '';
+    const subBar = document.getElementById('sub-categories-bar');
+    subBar.innerHTML = '';
+    subBar.style.display = 'none';
 
-    const allPill = document.createElement('li');
-    allPill.className = 'nav-pill active';
-    allPill.dataset.catId = '';
-    allPill.textContent = 'Todos';
-    allPill.onclick = () => {
-        removeSubPills();
-        filterByCategory(null);
-        playFlipSound();
-    };
-    categoryNav.appendChild(allPill);
+    let defaultCatId = null; // primera categoría visible → activa por defecto
 
-    seenCats.forEach(cat => {
-        const pill = document.createElement('li');
-        pill.className = 'nav-pill';
-        pill.dataset.catId = cat.id;
-        pill.textContent = cat.name;
+    CATEGORY_ORDER.forEach(catName => {
 
-        if (cat.isMaster) {
-            // Pill maestro "Bebidas": despliega sub-pills
+        // ── Pill maestro "Bebidas" ──
+        if (catName === 'Bebidas') {
+            const hasItems = bebidasIds.some(id => presentCatIds.has(id));
+            if (!hasItems) return;
+
+            const pill = buildPill('Bebidas', '__bebidas__');
             pill.onclick = () => {
                 playFlipSound();
-                const alreadyActive = pill.classList.contains('active');
-                removeSubPills();
-                document.querySelectorAll('.nav-pill').forEach(p => p.classList.remove('active'));
-                if (alreadyActive) {
-                    // Toggle off → volver a Todos
-                    allPill.classList.add('active');
-                    filterByCategory(null);
-                    return;
+                const isActive = pill.classList.contains('active');
+                setAllPillsInactive();
+                if (isActive) {
+                    subBar.style.display = 'none';
+                    // volver a la categoría por defecto
+                    filterByCategory(defaultCatId);
+                    markPillActive(defaultCatId);
+                } else {
+                    pill.classList.add('active');
+                    filterByCategory(bebidasIds);
+                    showSubBar(bebidasIds, subBar);
                 }
-                pill.classList.add('active');
-                // Filtrar TODOS los artículos de bebidas agregados
-                filterByCategory(bebidasIds);
-                // Insertar sub-pills justo después de este pill
-                const subCats = globalCategories.filter(c => BEBIDAS_SUBCATS.includes(c.name));
-                subCats.forEach(sc => {
-                    const sub = document.createElement('li');
-                    sub.className = 'nav-pill nav-sub-pill';
-                    sub.dataset.catId = sc.id;
-                    sub.dataset.isSub = '1';
-                    sub.textContent = sc.name;
-                    sub.onclick = () => {
-                        playFlipSound();
-                        document.querySelectorAll('.nav-sub-pill').forEach(s => s.classList.remove('active'));
-                        sub.classList.add('active');
-                        filterByCategory(sc.id);
-                    };
-                    pill.insertAdjacentElement('afterend', sub);
-                });
+                pill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
             };
-        } else {
-            pill.onclick = () => {
-                removeSubPills();
-                filterByCategory(cat.id);
-                playFlipSound();
-            };
+            categoryNav.appendChild(pill);
+            return;
         }
+
+        // ── Categoría normal ──
+        const catId = nameToId[catName];
+        if (!catId || !presentCatIds.has(catId)) return;
+        if (HIDDEN_CATEGORIES.includes(catName)) return;
+
+        const pill = buildPill(catName, catId);
+        if (defaultCatId === null) defaultCatId = catId; // primera → default
+
+        pill.onclick = () => {
+            playFlipSound();
+            setAllPillsInactive();
+            pill.classList.add('active');
+            subBar.style.display = 'none';
+            filterByCategory(catId);
+            pill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        };
         categoryNav.appendChild(pill);
     });
 
-    // ── Grid: solo ítems de categorías visibles ──
+    // Activar primera categoría por defecto (Entradas)
+    if (defaultCatId) {
+        markPillActive(defaultCatId);
+        filterByCategory(defaultCatId);
+    }
+
+    // ── Grid: renderizar todos los ítems válidos ──
     const grid = document.getElementById('menu-grid');
     grid.innerHTML = '';
     globalItems.forEach(item => {
         const catName = categoryMap[item.category_id] || '';
-        if (HIDDEN_CATEGORIES.includes(catName)) return; // ocultar
+        // Excluir categorías ocultas que NO son bebidas
+        if (HIDDEN_CATEGORIES.includes(catName) && !BEBIDAS_SUBCATS.includes(catName)) return;
         const card = createCard(item);
         card.dataset.catId = item.category_id || 'uncategorized';
         grid.appendChild(card);
     });
 }
 
-// Elimina los sub-pills de bebidas del DOM
-function removeSubPills() {
-    document.querySelectorAll('.nav-sub-pill').forEach(s => s.remove());
+// Crea un <li> pill genérico
+function buildPill(text, catId) {
+    const pill = document.createElement('li');
+    pill.className = 'nav-pill';
+    pill.dataset.catId = catId;
+    pill.textContent = text;
+    return pill;
 }
+
+// Marca activo el pill por catId
+function markPillActive(catId) {
+    document.querySelectorAll('#category-nav .nav-pill').forEach(p => {
+        p.classList.toggle('active', p.dataset.catId === (catId || ''));
+    });
+}
+
+function setAllPillsInactive() {
+    document.querySelectorAll('#category-nav .nav-pill').forEach(p => p.classList.remove('active'));
+}
+
+// Muestra la barra de sub-pills bajo la nav principal
+function showSubBar(bebidasIds, subBar) {
+    subBar.innerHTML = '';
+    subBar.style.display = 'flex';
+    const subCats = globalCategories.filter(c => BEBIDAS_SUBCATS.includes(c.name));
+    subCats.forEach(sc => {
+        const sub = document.createElement('button');
+        sub.className = 'sub-pill';
+        sub.textContent = sc.name;
+        sub.onclick = () => {
+            playFlipSound();
+            subBar.querySelectorAll('.sub-pill').forEach(s => s.classList.remove('active'));
+            sub.classList.add('active');
+            filterByCategory(sc.id);
+        };
+        subBar.appendChild(sub);
+    });
+}
+
+// Stub: sub-pills ya no están en la nav principal
+function removeSubPills() {}
+
+
 
 // ── Category Filter ───────────────────────────────────────────────────────────
 // catId: null = todos | string = un catId | string[] = varios catIds (Bebidas)

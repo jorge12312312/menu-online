@@ -167,26 +167,56 @@ body {
 
 .category-nav::-webkit-scrollbar { display: none; }
 
-/* ── Sub-pills de Bebidas ────────────────────────────────────────────────── */
-.nav-sub-pill {
-    background: rgba(61,169,74,0.1) !important;
-    border-color: rgba(61,169,74,0.4) !important;
-    color: rgba(255,255,255,0.75) !important;
-    font-size: 12px !important;
-    padding: 5px 14px !important;
-    animation: subPillIn 0.22s ease both;
+/* ── Sub-categories bar (Bebidas) ─────────────────────────────────────────── */
+.sub-categories-bar {
+    display: none;      /* toggled by JS */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding: 8px 16px 10px;
+    background: rgba(10, 22, 11, 0.97);
+    border-bottom: 1px solid rgba(61,169,74,0.18);
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    position: sticky;
+    top: var(--nav-height, 52px);
+    z-index: 99;
+    animation: subBarIn 0.2s ease both;
 }
 
-.nav-sub-pill.active {
-    background: var(--accent-primary) !important;
-    border-color: var(--accent-primary) !important;
-    color: #fff !important;
-    box-shadow: 0 0 12px var(--accent-glow) !important;
+.sub-categories-bar::-webkit-scrollbar { display: none; }
+
+@keyframes subBarIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes subPillIn {
-    from { opacity: 0; transform: scale(0.78) translateY(4px); }
-    to   { opacity: 1; transform: scale(1) translateY(0); }
+.sub-pill {
+    flex-shrink: 0;
+    background: rgba(61,169,74,0.1);
+    border: 1.5px solid rgba(61,169,74,0.35);
+    border-radius: 20px;
+    color: rgba(255,255,255,0.78);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-family);
+    padding: 6px 18px;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.sub-pill:hover {
+    background: rgba(61,169,74,0.22);
+    color: #fff;
+    border-color: rgba(61,169,74,0.6);
+}
+
+.sub-pill.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: #fff;
+    box-shadow: 0 0 14px var(--accent-glow);
 }
 
 /* Fade edges nav ──────────────────────────────────────────────────── */
@@ -812,6 +842,8 @@ body {
     overflow-y: auto;
     flex: 1;
     overscroll-behavior: contain;
+    /* Espacio para que el último artículo no quede tapado por el FAB flotante */
+    padding-bottom: 160px;
 }
 
 .cart-item {
