@@ -175,7 +175,6 @@ function createCard(item) {
                 </div>
             </div>
             <div class="card-face card-back">
-                <div class="card-back-icon">${item.image_url ? '🍽️' : '📝'}</div>
                 <div class="card-back-title">${item.name}</div>
                 <div class="card-back-desc">${item.description || '<span class="no-desc">Sin descripción disponible</span>'}</div>
                 <div class="card-back-price">S/ ${item.price.toFixed(2)}</div>
@@ -263,11 +262,8 @@ function renderApp() {
         categoryNav.appendChild(pill);
     });
 
-    // Activar primera categoría por defecto (Entradas)
-    if (defaultCatId) {
-        markPillActive(defaultCatId);
-        filterByCategory(defaultCatId);
-    }
+    // Activar pill visualmente (sin filtrar todavía, el grid no existe aún)
+    if (defaultCatId) markPillActive(defaultCatId);
 
     // ── Grid: renderizar todos los ítems válidos ──
     const grid = document.getElementById('menu-grid');
@@ -280,6 +276,9 @@ function renderApp() {
         card.dataset.catId = item.category_id || 'uncategorized';
         grid.appendChild(card);
     });
+
+    // Aplicar el filtro inicial DESPUÉS de que el grid esté construido
+    if (defaultCatId) filterByCategory(defaultCatId);
 }
 
 // Crea un <li> pill genérico
