@@ -33,7 +33,22 @@ const paymentModal    = document.getElementById('payment-modal');
 const btnClosePayment = document.getElementById('btn-close-payment');
 const btnWhatsapp     = document.getElementById('btn-whatsapp');
 
-// ── Web Audio Engine ──────────────────────────────────────────────────
+// ── Audio Engine ──────────────────────────────────────────────────────────────
+
+// Sonido de hoja (flip / categoría): cargado una sola vez al inicio
+const _leafAudio = new Audio('leaf.mp3');
+_leafAudio.volume = 0.55;
+_leafAudio.preload = 'auto';
+
+/* Sonido 1: hoja MP3 — al girar tarjeta y al cambiar categoría */
+function playFlipSound() {
+    try {
+        _leafAudio.currentTime = 0; // rebobinar para poder reproducir seguido
+        _leafAudio.play().catch(() => { /* autoplay bloqueado — silencioso */ });
+    } catch(e) { /* fail silently */ }
+}
+
+/* Sonido 2: Campanilla de moneda (ding, Web Audio) — SOLO al agregar al carrito */
 let _audioCtx = null;
 function getAudioCtx() {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -41,34 +56,6 @@ function getAudioCtx() {
     return _audioCtx;
 }
 
-/* Sonido 1: Swoosh suave (papel/flip) — al girar tarjeta y cambiar categoría */
-function playFlipSound() {
-    try {
-        const ctx  = getAudioCtx();
-        const dur  = 0.11;
-        const sr   = ctx.sampleRate;
-        const buf  = ctx.createBuffer(1, Math.floor(sr * dur), sr);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < data.length; i++) {
-            const t  = i / sr;
-            data[i]  = (Math.random() * 2 - 1) * Math.exp(-t * 45) * 0.28;
-        }
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        const filt = ctx.createBiquadFilter();
-        filt.type = 'bandpass';
-        filt.frequency.setValueAtTime(1600, ctx.currentTime);
-        filt.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + dur);
-        filt.Q.value = 1.8;
-        const gain = ctx.createGain();
-        gain.gain.setValueAtTime(0.55, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-        src.connect(filt); filt.connect(gain); gain.connect(ctx.destination);
-        src.start();
-    } catch(e) { /* fail silently */ }
-}
-
-/* Sonido 2: Campanilla de moneda (ding) — al añadir al carrito */
 function playAddSound() {
     try {
         const ctx = getAudioCtx();
