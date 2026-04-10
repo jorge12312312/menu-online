@@ -474,8 +474,8 @@ body {
 .card-image-wrap {
     width: 100%;
     aspect-ratio: 4 / 3;
-    position: relative;
-    overflow: hidden;
+    position: relative !important;
+    overflow: hidden !important;
     background: var(--surface-color);
     flex-shrink: 0;
 }
@@ -483,19 +483,16 @@ body {
 .card-image {
     width: 100% !important;
     height: 100% !important;
-    min-width: 100%;
-    min-height: 100%;
     object-fit: cover !important;
-    object-position: center center !important;
-    /* Zoom suave para cortar márgenes blancos/transparentes de imágenes de Loyverse */
-    transform: scale(1.05);
+    object-position: center !important;
+    /* Zoom 25%: elimina bordes blancos/transparentes nativos de las fotos de Loyverse */
+    transform: scale(1.25) !important;
     transition: transform 0.4s ease;
     display: block;
-    background: var(--surface-color);
 }
 
-/* Ken-Burns solo cuando NO está girada — parte desde el zoom base */
-.menu-card:not(.flipped):hover .card-image { transform: scale(1.1); }
+/* Ken-Burns al hover: sube desde la base 1.25 */
+.menu-card:not(.flipped):hover .card-image { transform: scale(1.32) !important; }
 
 /* Gradient overlay on image bottom */
 .card-image-wrap::after {
